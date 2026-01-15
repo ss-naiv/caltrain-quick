@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#E31837">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Caltrain">
+  <title>Caltrain Quick</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red: #E31837;
+      --gray: #333;
+      --light-gray: #f5f5f5;
+      --local: #6B7280;
+      --limited: #0891B2;
+      --express: #E31837;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--light-gray);
+      min-height: 100vh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    header {
+      background: var(--red);
+      color: white;
+      padding: 16px;
+      padding-top: calc(16px + env(safe-area-inset-top));
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    header h1 { font-size: 20px; font-weight: 600; }
+    .service-type {
+      font-size: 12px;
+      background: rgba(255,255,255,0.2);
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .container { padding: 16px; max-width: 500px; margin: 0 auto; }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .card-title {
+      font-size: 12px;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    select {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 8px center;
+      background-size: 20px;
+    }
+    .favorites {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .fav-btn {
+      padding: 8px 14px;
+      background: var(--light-gray);
+      border: none;
+      border-radius: 20px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .fav-btn:hover, .fav-btn.active { background: #ddd; }
+    .time-selector {
+      display: flex;
+      gap: 8px;
+    }
+    .time-btn {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid #ddd;
+      background: white;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .time-btn.active {
+      background: var(--red);
+      color: white;
+      border-color: var(--red);
+    }
+    .train-list { display: flex; flex-direction: column; gap: 8px; }
+    .train {
+      display: flex;
+      align-items: center;
+      padding: 12px;
+      background: var(--light-gray);
+      border-radius: 8px;
+      gap: 12px;
+    }
+    .train-time {
+      font-size: 24px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      min-width: 80px;
+    }
+    .train-info { flex: 1; }
+    .train-number { font-size: 14px; color: #666; }
+    .train-type {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+    .type-local { background: #E5E7EB; color: var(--local); }
+    .type-limited { background: #CFFAFE; color: var(--limited); }
+    .type-express { background: #FEE2E2; color: var(--express); }
+    .train-eta {
+      font-size: 14px;
+      font-weight: 500;
+      text-align: right;
+      min-width: 60px;
+    }
+    .eta-now { color: var(--express); }
+    .eta-soon { color: #F59E0B; }
+    .no-trains {
+      text-align: center;
+      padding: 32px;
+      color: #666;
+    }
+    .direction-toggle {
+      display: flex;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #ddd;
+    }
+    .dir-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      background: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .dir-btn.active {
+      background: var(--gray);
+      color: white;
+    }
+    .setup-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      z-index: 100;
+    }
+    .setup-content {
+      background: white;
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 400px;
+      width: 100%;
+    }
+    .setup-title { font-size: 20px; font-weight: 600; margin-bottom: 8px; }
+    .setup-desc { color: #666; margin-bottom: 20px; font-size: 14px; }
+    .setup-btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 16px;
+    }
+    .hidden { display: none !important; }
+    footer {
+      text-align: center;
+      padding: 16px;
+      font-size: 12px;
+      color: #999;
+    }
+    footer a { color: #666; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Caltrain Quick</h1>
+    <span class="service-type" id="serviceType">Weekday</span>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title">From</div>
+      <select id="homeStation" disabled>
+        <option value="">Loading...</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="card-title">To</div>
+      <div class="direction-toggle">
+        <button class="dir-btn active" data-dir="n">North (SF)</button>
+        <button class="dir-btn" data-dir="s">South (SJ)</button>
+      </div>
+      <select id="destStation">
+        <option value="">Select destination</option>
+      </select>
+      <div class="favorites" id="favorites"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Departing within</div>
+      <div class="time-selector">
+        <button class="time-btn active" data-hours="1">1 hr</button>
+        <button class="time-btn" data-hours="2">2 hrs</button>
+        <button class="time-btn" data-hours="4">4 hrs</button>
+        <button class="time-btn" data-hours="8">All day</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Next trains</div>
+      <div class="train-list" id="trainList">
+        <div class="no-trains">Select a destination to see trains</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    Schedule valid until <span id="validUntil">-</span><br>
+    <a href="#" id="changeHome">Change home station</a>
+  </footer>
+
+  <div class="setup-modal hidden" id="setupModal">
+    <div class="setup-content">
+      <div class="setup-title">Welcome to Caltrain Quick</div>
+      <div class="setup-desc">Select your home station to get started. You can change this later.</div>
+      <select id="setupStation"></select>
+      <button class="setup-btn" id="setupSave">Save &amp; Continue</button>
+    </div>
+  </div>
+
+  <script>
+    // Schedule data will be loaded from external file
+    let DATA = null;
+    const STORAGE_KEY = 'caltrain-quick';
+
+    // State
+    let state = {
+      homeStation: null,
+      direction: 'n',
+      destination: null,
+      hours: 1,
+      favorites: []
+    };
+
+    // Load state from localStorage
+    function loadState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          state = { ...state, ...parsed };
+        }
+      } catch (e) {}
+    }
+
+    // Save state to localStorage
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    // Get service type for today
+    function getServiceType() {
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+      const day = now.getDay();
+
+      // Check holidays first
+      if (DATA.holidays[dateStr]) {
+        return 'weekend';
+      }
+
+      // Weekend
+      if (day === 0 || day === 6) {
+        return 'weekend';
+      }
+
+      return 'weekday';
+    }
+
+    // Format minutes to time string
+    function formatTime(minutes) {
+      let h = Math.floor(minutes / 60);
+      const m = minutes % 60;
+      const ampm = h >= 12 ? 'pm' : 'am';
+      h = h % 12 || 12;
+      return `${h}:${m.toString().padStart(2, '0')}${ampm}`;
+    }
+
+    // Get current minutes since midnight
+    function getCurrentMinutes() {
+      const now = new Date();
+      return now.getHours() * 60 + now.getMinutes();
+    }
+
+    // Get route type name and class
+    function getRouteType(type) {
+      const types = [
+        { name: 'Local', class: 'type-local' },
+        { name: 'Limited', class: 'type-limited' },
+        { name: 'Express', class: 'type-express' },
+        { name: 'S. County', class: 'type-local' }
+      ];
+      return types[type] || types[0];
+    }
+
+    // Populate station dropdowns
+    function populateStations() {
+      const homeSelect = document.getElementById('homeStation');
+      const destSelect = document.getElementById('destStation');
+      const setupSelect = document.getElementById('setupStation');
+
+      const options = DATA.stations.map(s =>
+        `<option value="${s.id}">${s.name}</option>`
+      ).join('');
+
+      homeSelect.innerHTML = options;
+      setupSelect.innerHTML = options;
+      homeSelect.disabled = false;
+
+      updateDestinations();
+    }
+
+    // Update destination dropdown based on direction
+    function updateDestinations() {
+      const destSelect = document.getElementById('destStation');
+      const homeIdx = DATA.stations.findIndex(s => s.id === state.homeStation);
+
+      let stations;
+      if (state.direction === 'n') {
+        // Northbound: stations before home (lower index = more north)
+        stations = DATA.stations.slice(0, homeIdx);
+      } else {
+        // Southbound: stations after home
+        stations = DATA.stations.slice(homeIdx + 1);
+      }
+
+      const options = '<option value="">Select destination</option>' +
+        stations.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+      destSelect.innerHTML = options;
+
+      if (state.destination) {
+        destSelect.value = state.destination;
+      }
+
+      updateFavorites();
+    }
+
+    // Update favorites buttons
+    function updateFavorites() {
+      const container = document.getElementById('favorites');
+      const homeIdx = DATA.stations.findIndex(s => s.id === state.homeStation);
+
+      // Filter favorites to only show valid ones for current direction
+      const validFavs = state.favorites.filter(fav => {
+        const favIdx = DATA.stations.findIndex(s => s.id === fav);
+        if (state.direction === 'n') {
+          return favIdx < homeIdx;
+        } else {
+          return favIdx > homeIdx;
+        }
+      });
+
+      if (validFavs.length === 0) {
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = validFavs.map(fav => {
+        const station = DATA.stations.find(s => s.id === fav);
+        const isActive = fav === state.destination;
+        return `<button class="fav-btn ${isActive ? 'active' : ''}" data-station="${fav}">${station.name}</button>`;
+      }).join('');
+    }
+
+    // Update train list
+    function updateTrains() {
+      const container = document.getElementById('trainList');
+
+      if (!state.destination) {
+        container.innerHTML = '<div class="no-trains">Select a destination to see trains</div>';
+        return;
+      }
+
+      const serviceType = getServiceType();
+      const serviceFilter = serviceType === 'weekday' ? 0 : 1;
+      const currentMinutes = getCurrentMinutes();
+      const maxMinutes = currentMinutes + (state.hours * 60);
+
+      const scheduleKey = state.direction === 'n' ? 'n' : 's';
+      const schedule = DATA.schedule[state.homeStation]?.[scheduleKey] || [];
+
+      // Filter trains: correct service type, departing within time window
+      let trains = schedule.filter(t => {
+        const [time, , , svc] = t;
+        return svc === serviceFilter &&
+               time >= currentMinutes &&
+               time <= maxMinutes;
+      });
+
+      // Limit to 6 trains
+      trains = trains.slice(0, 6);
+
+      if (trains.length === 0) {
+        container.innerHTML = '<div class="no-trains">No trains in this time window</div>';
+        return;
+      }
+
+      container.innerHTML = trains.map(t => {
+        const [time, trainNum, routeType] = t;
+        const route = getRouteType(routeType);
+        const eta = time - currentMinutes;
+
+        let etaText, etaClass = '';
+        if (eta <= 0) {
+          etaText = 'Now';
+          etaClass = 'eta-now';
+        } else if (eta <= 10) {
+          etaText = `${eta} min`;
+          etaClass = 'eta-soon';
+        } else if (eta < 60) {
+          etaText = `${eta} min`;
+        } else {
+          const hrs = Math.floor(eta / 60);
+          const mins = eta % 60;
+          etaText = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+        }
+
+        return `
+          <div class="train">
+            <div class="train-time">${formatTime(time)}</div>
+            <div class="train-info">
+              <div class="train-number">Train ${trainNum}</div>
+              <span class="train-type ${route.class}">${route.name}</span>
+            </div>
+            <div class="train-eta ${etaClass}">${etaText}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Add to favorites
+    function addToFavorites(stationId) {
+      if (!state.favorites.includes(stationId)) {
+        state.favorites = [stationId, ...state.favorites].slice(0, 5);
+        saveState();
+      }
+    }
+
+    // Update service type display
+    function updateServiceDisplay() {
+      const serviceType = getServiceType();
+      document.getElementById('serviceType').textContent =
+        serviceType === 'weekday' ? 'Weekday' : 'Weekend';
+    }
+
+    // Initialize app
+    async function init() {
+      loadState();
+
+      // Load schedule data
+      try {
+        const response = await fetch('schedule-data.min.json');
+        DATA = await response.json();
+      } catch (e) {
+        console.error('Failed to load schedule data:', e);
+        return;
+      }
+
+      // Update valid until date
+      if (DATA.validTo) {
+        const y = DATA.validTo.slice(0, 4);
+        const m = DATA.validTo.slice(4, 6);
+        const d = DATA.validTo.slice(6, 8);
+        document.getElementById('validUntil').textContent = `${m}/${d}/${y}`;
+      }
+
+      populateStations();
+      updateServiceDisplay();
+
+      // Show setup if no home station
+      if (!state.homeStation) {
+        document.getElementById('setupModal').classList.remove('hidden');
+        // Default to Palo Alto
+        document.getElementById('setupStation').value = 'palo_alto';
+      } else {
+        document.getElementById('homeStation').value = state.homeStation;
+        updateDestinations();
+        updateTrains();
+      }
+
+      // Event listeners
+      document.getElementById('homeStation').addEventListener('change', (e) => {
+        state.homeStation = e.target.value;
+        state.destination = null;
+        saveState();
+        updateDestinations();
+        updateTrains();
+      });
+
+      document.getElementById('destStation').addEventListener('change', (e) => {
+        state.destination = e.target.value;
+        if (state.destination) {
+          addToFavorites(state.destination);
+        }
+        updateTrains();
+        updateFavorites();
+      });
+
+      document.querySelectorAll('.dir-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.dir-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.direction = btn.dataset.dir;
+          state.destination = null;
+          updateDestinations();
+          updateTrains();
+        });
+      });
+
+      document.querySelectorAll('.time-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.hours = parseInt(btn.dataset.hours);
+          updateTrains();
+        });
+      });
+
+      document.getElementById('favorites').addEventListener('click', (e) => {
+        if (e.target.classList.contains('fav-btn')) {
+          state.destination = e.target.dataset.station;
+          document.getElementById('destStation').value = state.destination;
+          updateTrains();
+          updateFavorites();
+        }
+      });
+
+      document.getElementById('setupSave').addEventListener('click', () => {
+        state.homeStation = document.getElementById('setupStation').value;
+        saveState();
+        document.getElementById('homeStation').value = state.homeStation;
+        document.getElementById('setupModal').classList.add('hidden');
+        updateDestinations();
+        updateTrains();
+      });
+
+      document.getElementById('changeHome').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('setupModal').classList.remove('hidden');
+        document.getElementById('setupStation').value = state.homeStation;
+      });
+
+      // Refresh every minute
+      setInterval(() => {
+        updateServiceDisplay();
+        updateTrains();
+      }, 60000);
+    }
+
+    // Start app
+    init();
+
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
