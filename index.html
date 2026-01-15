@@ -200,6 +200,58 @@
       margin-top: 16px;
     }
     .hidden { display: none !important; }
+    .swap-container {
+      display: flex;
+      justify-content: center;
+      margin: -8px 0;
+      position: relative;
+      z-index: 1;
+    }
+    .swap-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 2px solid #ddd;
+      background: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .swap-btn:hover { border-color: var(--red); }
+    .swap-btn:active { transform: scale(0.95); }
+    .swap-btn svg { width: 20px; height: 20px; stroke: #666; }
+    .swap-btn:hover svg { stroke: var(--red); }
+    .reversed-banner {
+      background: #FEF3C7;
+      border: 1px solid #F59E0B;
+      color: #92400E;
+      padding: 8px 12px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 14px;
+    }
+    .reversed-banner button {
+      background: #F59E0B;
+      color: white;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .expiry-warning {
+      background: #FEE2E2;
+      color: #991B1B;
+      padding: 10px 16px;
+      font-size: 13px;
+      text-align: center;
+    }
     footer {
       text-align: center;
       padding: 16px;
@@ -215,16 +267,33 @@
     <span class="service-type" id="serviceType">Weekday</span>
   </header>
 
+  <div class="expiry-warning hidden" id="expiryWarning">
+    Schedule may be outdated. New schedule available.
+  </div>
+
   <div class="container">
+    <div class="reversed-banner hidden" id="reversedBanner">
+      <span>Showing return trains</span>
+      <button id="resetTrip">Back to home</button>
+    </div>
+
     <div class="card">
-      <div class="card-title">From</div>
+      <div class="card-title" id="fromLabel">From</div>
       <select id="homeStation" disabled>
         <option value="">Loading...</option>
       </select>
     </div>
 
+    <div class="swap-container">
+      <button class="swap-btn" id="swapBtn" title="Check return trains">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16"/>
+        </svg>
+      </button>
+    </div>
+
     <div class="card">
-      <div class="card-title">To</div>
+      <div class="card-title" id="toLabel">To</div>
       <div class="direction-toggle">
         <button class="dir-btn active" data-dir="n">North (SF)</button>
         <button class="dir-btn" data-dir="s">South (SJ)</button>
@@ -279,6 +348,13 @@
       destination: null,
       hours: 1,
       favorites: []
+    };
+
+    // Temporary state for reversed view (not persisted)
+    let viewState = {
+      isReversed: false,
+      tempFrom: null,
+      tempTo: null
     };
 
     // Load state from localStorage
@@ -412,11 +488,28 @@
       }).join('');
     }
 
+    // Get current effective from/to stations
+    function getEffectiveStations() {
+      if (viewState.isReversed) {
+        return {
+          from: viewState.tempFrom,
+          to: viewState.tempTo,
+          direction: state.direction === 'n' ? 's' : 'n'
+        };
+      }
+      return {
+        from: state.homeStation,
+        to: state.destination,
+        direction: state.direction
+      };
+    }
+
     // Update train list
     function updateTrains() {
       const container = document.getElementById('trainList');
+      const { from, to, direction } = getEffectiveStations();
 
-      if (!state.destination) {
+      if (!to) {
         container.innerHTML = '<div class="no-trains">Select a destination to see trains</div>';
         return;
       }
@@ -426,8 +519,8 @@
       const currentMinutes = getCurrentMinutes();
       const maxMinutes = currentMinutes + (state.hours * 60);
 
-      const scheduleKey = state.direction === 'n' ? 'n' : 's';
-      const schedule = DATA.schedule[state.homeStation]?.[scheduleKey] || [];
+      const scheduleKey = direction === 'n' ? 'n' : 's';
+      const schedule = DATA.schedule[from]?.[scheduleKey] || [];
 
       // Filter trains: correct service type, departing within time window
       let trains = schedule.filter(t => {
@@ -493,6 +586,74 @@
         serviceType === 'weekday' ? 'Weekday' : 'Weekend';
     }
 
+    // Check schedule expiry
+    function checkScheduleExpiry() {
+      if (!DATA?.validTo) return;
+      const now = new Date();
+      const validTo = new Date(
+        DATA.validTo.slice(0, 4),
+        parseInt(DATA.validTo.slice(4, 6)) - 1,
+        DATA.validTo.slice(6, 8)
+      );
+      const daysUntilExpiry = Math.ceil((validTo - now) / (1000 * 60 * 60 * 24));
+
+      if (daysUntilExpiry <= 14) {
+        document.getElementById('expiryWarning').classList.remove('hidden');
+      }
+    }
+
+    // Swap stations for return trip view
+    function swapStations() {
+      if (!state.destination) return;
+
+      viewState.isReversed = !viewState.isReversed;
+
+      if (viewState.isReversed) {
+        // Store current state for reversal
+        viewState.tempFrom = state.destination;
+        viewState.tempTo = state.homeStation;
+
+        // Update UI to show reversed state
+        document.getElementById('reversedBanner').classList.remove('hidden');
+        document.getElementById('homeStation').value = viewState.tempFrom;
+        document.getElementById('homeStation').disabled = true;
+
+        // Update "To" dropdown to only show the original home station
+        const destSelect = document.getElementById('destStation');
+        const homeStationData = DATA.stations.find(s => s.id === state.homeStation);
+        destSelect.innerHTML = `<option value="${state.homeStation}">${homeStationData.name}</option>`;
+        destSelect.disabled = true;
+
+        // Hide direction toggle and favorites in reversed mode
+        document.querySelector('.direction-toggle').style.display = 'none';
+        document.getElementById('favorites').style.display = 'none';
+      } else {
+        resetToNormalView();
+      }
+
+      updateTrains();
+    }
+
+    // Reset to normal view
+    function resetToNormalView() {
+      viewState.isReversed = false;
+      viewState.tempFrom = null;
+      viewState.tempTo = null;
+
+      document.getElementById('reversedBanner').classList.add('hidden');
+      document.getElementById('homeStation').value = state.homeStation;
+      document.getElementById('homeStation').disabled = false;
+
+      // Restore direction toggle and favorites
+      document.querySelector('.direction-toggle').style.display = 'flex';
+      document.getElementById('favorites').style.display = 'flex';
+
+      // Restore destination dropdown
+      document.getElementById('destStation').disabled = false;
+      updateDestinations();
+      updateTrains();
+    }
+
     // Initialize app
     async function init() {
       loadState();
@@ -516,6 +677,7 @@
 
       populateStations();
       updateServiceDisplay();
+      checkScheduleExpiry();
 
       // Show setup if no home station
       if (!state.homeStation) {
@@ -530,6 +692,7 @@
 
       // Event listeners
       document.getElementById('homeStation').addEventListener('change', (e) => {
+        if (viewState.isReversed) return; // Ignore in reversed mode
         state.homeStation = e.target.value;
         state.destination = null;
         saveState();
@@ -589,6 +752,12 @@
         document.getElementById('setupModal').classList.remove('hidden');
         document.getElementById('setupStation').value = state.homeStation;
       });
+
+      // Swap button
+      document.getElementById('swapBtn').addEventListener('click', swapStations);
+
+      // Reset button (back to home)
+      document.getElementById('resetTrip').addEventListener('click', resetToNormalView);
 
       // Refresh every minute
       setInterval(() => {
