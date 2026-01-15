@@ -374,7 +374,8 @@
     let viewState = {
       isReversed: false,
       tempFrom: null,
-      tempTo: null
+      tempTo: null,
+      expandedSection: null  // Track which section is expanded
     };
 
     // Load state from localStorage
@@ -641,11 +642,37 @@
 
       container.innerHTML = html;
 
-      // Add toggle listeners
+      // Restore expanded section if any
+      if (viewState.expandedSection) {
+        const btn = container.querySelector(`[data-section="${viewState.expandedSection}"]`);
+        const list = document.getElementById(viewState.expandedSection);
+        if (btn && list) {
+          btn.classList.add('open');
+          list.classList.add('open');
+        }
+      }
+
+      // Add toggle listeners with auto-collapse
       container.querySelectorAll('.section-toggle').forEach(btn => {
         btn.addEventListener('click', () => {
           const sectionId = btn.dataset.section;
           const list = document.getElementById(sectionId);
+          const isOpening = !btn.classList.contains('open');
+
+          // Auto-collapse other sections when opening this one
+          if (isOpening) {
+            container.querySelectorAll('.section-toggle').forEach(otherBtn => {
+              if (otherBtn !== btn) {
+                otherBtn.classList.remove('open');
+                const otherId = otherBtn.dataset.section;
+                document.getElementById(otherId)?.classList.remove('open');
+              }
+            });
+            viewState.expandedSection = sectionId;
+          } else {
+            viewState.expandedSection = null;
+          }
+
           btn.classList.toggle('open');
           list.classList.toggle('open');
         });
@@ -831,7 +858,7 @@
       // Reset button (back to home)
       document.getElementById('resetTrip').addEventListener('click', resetToNormalView);
 
-      // Refresh every minute
+      // Refresh every minute (expanded state is preserved)
       setInterval(() => {
         updateServiceDisplay();
         updateTrains();
