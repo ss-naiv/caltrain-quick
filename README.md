@@ -9,9 +9,10 @@ A fast, mobile-friendly PWA for looking up Caltrain schedules. Designed for quic
 - **Auto-detects weekday/weekend** - Shows the correct schedule based on the current day (including holidays)
 - **Saves your home station** - Remembers your preferred departure station
 - **Favorite destinations** - Quick-access buttons for your last 5 searched destinations
-- **Time window filter** - See trains departing in 1hr, 2hrs, 4hrs, or all day
+- **Collapsible train buckets** - Next trains always visible, "Later" and "Rest of day" expandable
 - **Train types** - Color-coded: Local (gray), Limited (teal), Express (red)
 - **Return trip lookup** - Swap button to quickly check trains back home
+- **Auto-refresh** - Train list updates every 60 seconds
 - **Works offline** - Service worker caches the app after first load
 
 ## Installation (iPhone)
@@ -27,7 +28,10 @@ A fast, mobile-friendly PWA for looking up Caltrain schedules. Designed for quic
 1. Set your home station (first time only)
 2. Choose direction: North (SF) or South (SJ)
 3. Select a destination
-4. View upcoming trains with departure times and ETAs
+4. View upcoming trains:
+   - **Next trains** - First 6 departures, always visible
+   - **Later** - Next 6 trains, tap to expand (shows time range)
+   - **Rest of day** - Remaining trains, tap to expand
 
 ### Check return trains
 1. After selecting a destination, tap the **swap button** (circular icon between From/To)
@@ -37,7 +41,6 @@ A fast, mobile-friendly PWA for looking up Caltrain schedules. Designed for quic
 
 ### Change settings
 - **Change home station:** Tap "Change home station" link at bottom of page
-- **Adjust time window:** Tap 1hr / 2hrs / 4hrs / All day buttons
 
 ## Schedule Updates
 
