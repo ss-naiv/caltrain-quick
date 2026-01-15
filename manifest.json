@@ -1,0 +1,23 @@
+{
+  "name": "Caltrain Quick",
+  "short_name": "Caltrain",
+  "description": "Quick Caltrain schedule lookup",
+  "start_url": "/caltrain-quick/",
+  "display": "standalone",
+  "background_color": "#f5f5f5",
+  "theme_color": "#E31837",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
