@@ -1,0 +1,61 @@
+name: Update Caltrain Schedule
+
+on:
+  schedule:
+    # Run every Monday at 9am UTC (1am PST)
+    - cron: '0 9 * * 1'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Download GTFS data
+        run: |
+          curl -sL "https://data.trilliumtransit.com/gtfs/caltrain-ca-us/caltrain-ca-us.zip" -o caltrain-gtfs.zip
+          unzip -o caltrain-gtfs.zip -d gtfs
+
+      - name: Process schedule data
+        run: node process-gtfs.js
+
+      - name: Check for changes
+        id: check
+        run: |
+          if git diff --quiet schedule-data.min.json 2>/dev/null; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+            echo "No schedule changes detected"
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "Schedule changes detected!"
+          fi
+
+      - name: Checkout gh-pages branch
+        if: steps.check.outputs.changed == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Update gh-pages with new schedule
+        if: steps.check.outputs.changed == 'true'
+        run: |
+          cp schedule-data.min.json gh-pages/
+          cd gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add schedule-data.min.json
+          git commit -m "Update schedule data (automated)"
+          git push
