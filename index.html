@@ -86,25 +86,56 @@
       transition: background 0.2s;
     }
     .fav-btn:hover, .fav-btn.active { background: #ddd; }
-    .time-selector {
+    .train-section { margin-bottom: 16px; }
+    .train-section:last-child { margin-bottom: 0; }
+    .section-header {
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      margin-bottom: 8px;
       display: flex;
-      gap: 8px;
+      align-items: center;
+      gap: 6px;
     }
-    .time-btn {
-      flex: 1;
-      padding: 10px;
-      border: 1px solid #ddd;
-      background: white;
+    .section-toggle {
+      width: 100%;
+      padding: 10px 12px;
+      background: #fafafa;
+      border: 1px solid #eee;
       border-radius: 8px;
-      font-size: 14px;
+      font-size: 13px;
+      color: #666;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       transition: all 0.2s;
     }
-    .time-btn.active {
-      background: var(--red);
-      color: white;
-      border-color: var(--red);
+    .section-toggle:hover { background: #f0f0f0; border-color: #ddd; }
+    .section-toggle svg {
+      width: 16px;
+      height: 16px;
+      transition: transform 0.2s;
+      flex-shrink: 0;
     }
+    .section-toggle.open { background: #f5f5f5; }
+    .section-toggle.open svg { transform: rotate(180deg); }
+    .section-toggle-text { display: flex; gap: 8px; align-items: center; }
+    .section-count {
+      background: #e5e5e5;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+    .section-time { color: #999; font-size: 12px; }
+    .collapsible-list {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .collapsible-list.open { display: flex; }
+    .collapsible-list .train { background: #fafafa; }
     .train-list { display: flex; flex-direction: column; gap: 8px; }
     .train {
       display: flex;
@@ -305,18 +336,8 @@
     </div>
 
     <div class="card">
-      <div class="card-title">Departing within</div>
-      <div class="time-selector">
-        <button class="time-btn active" data-hours="1">1 hr</button>
-        <button class="time-btn" data-hours="2">2 hrs</button>
-        <button class="time-btn" data-hours="4">4 hrs</button>
-        <button class="time-btn" data-hours="8">All day</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-title">Next trains</div>
-      <div class="train-list" id="trainList">
+      <div class="card-title">Trains</div>
+      <div id="trainList">
         <div class="no-trains">Select a destination to see trains</div>
       </div>
     </div>
@@ -346,7 +367,6 @@
       homeStation: null,
       direction: 'n',
       destination: null,
-      hours: 1,
       favorites: []
     };
 
@@ -504,6 +524,66 @@
       };
     }
 
+    // Render a single train row
+    function renderTrain(t, currentMinutes) {
+      const [time, trainNum, routeType] = t;
+      const route = getRouteType(routeType);
+      const eta = time - currentMinutes;
+
+      let etaText, etaClass = '';
+      if (eta <= 0) {
+        etaText = 'Now';
+        etaClass = 'eta-now';
+      } else if (eta <= 10) {
+        etaText = `${eta} min`;
+        etaClass = 'eta-soon';
+      } else if (eta < 60) {
+        etaText = `${eta} min`;
+      } else {
+        const hrs = Math.floor(eta / 60);
+        const mins = eta % 60;
+        etaText = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
+      }
+
+      return `
+        <div class="train">
+          <div class="train-time">${formatTime(time)}</div>
+          <div class="train-info">
+            <div class="train-number">Train ${trainNum}</div>
+            <span class="train-type ${route.class}">${route.name}</span>
+          </div>
+          <div class="train-eta ${etaClass}">${etaText}</div>
+        </div>
+      `;
+    }
+
+    // Render a collapsible section
+    function renderCollapsibleSection(id, label, trains, currentMinutes) {
+      if (trains.length === 0) return '';
+
+      const firstTime = formatTime(trains[0][0]);
+      const lastTime = formatTime(trains[trains.length - 1][0]);
+      const timeRange = trains.length === 1 ? firstTime : `${firstTime} - ${lastTime}`;
+
+      return `
+        <div class="train-section">
+          <button class="section-toggle" data-section="${id}">
+            <span class="section-toggle-text">
+              <span>${label}</span>
+              <span class="section-count">${trains.length}</span>
+              <span class="section-time">${timeRange}</span>
+            </span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 9l6 6 6-6"/>
+            </svg>
+          </button>
+          <div class="collapsible-list" id="${id}">
+            ${trains.map(t => renderTrain(t, currentMinutes)).join('')}
+          </div>
+        </div>
+      `;
+    }
+
     // Update train list
     function updateTrains() {
       const container = document.getElementById('trainList');
@@ -517,58 +597,59 @@
       const serviceType = getServiceType();
       const serviceFilter = serviceType === 'weekday' ? 0 : 1;
       const currentMinutes = getCurrentMinutes();
-      const maxMinutes = currentMinutes + (state.hours * 60);
 
       const scheduleKey = direction === 'n' ? 'n' : 's';
       const schedule = DATA.schedule[from]?.[scheduleKey] || [];
 
-      // Filter trains: correct service type, departing within time window
-      let trains = schedule.filter(t => {
+      // Filter trains: correct service type, departing today (until ~2am next day)
+      const endOfDay = 24 * 60 + 120; // Until 2am
+      let allTrains = schedule.filter(t => {
         const [time, , , svc] = t;
         return svc === serviceFilter &&
                time >= currentMinutes &&
-               time <= maxMinutes;
+               time <= endOfDay;
       });
 
-      // Limit to 6 trains
-      trains = trains.slice(0, 6);
-
-      if (trains.length === 0) {
-        container.innerHTML = '<div class="no-trains">No trains in this time window</div>';
+      if (allTrains.length === 0) {
+        container.innerHTML = '<div class="no-trains">No more trains today</div>';
         return;
       }
 
-      container.innerHTML = trains.map(t => {
-        const [time, trainNum, routeType] = t;
-        const route = getRouteType(routeType);
-        const eta = time - currentMinutes;
+      // Split into buckets: Next (first 6), Later (next 6), Rest
+      const BUCKET_SIZE = 6;
+      const nextTrains = allTrains.slice(0, BUCKET_SIZE);
+      const laterTrains = allTrains.slice(BUCKET_SIZE, BUCKET_SIZE * 2);
+      const restTrains = allTrains.slice(BUCKET_SIZE * 2);
 
-        let etaText, etaClass = '';
-        if (eta <= 0) {
-          etaText = 'Now';
-          etaClass = 'eta-now';
-        } else if (eta <= 10) {
-          etaText = `${eta} min`;
-          etaClass = 'eta-soon';
-        } else if (eta < 60) {
-          etaText = `${eta} min`;
-        } else {
-          const hrs = Math.floor(eta / 60);
-          const mins = eta % 60;
-          etaText = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
-        }
+      let html = '';
 
-        return `
-          <div class="train">
-            <div class="train-time">${formatTime(time)}</div>
-            <div class="train-info">
-              <div class="train-number">Train ${trainNum}</div>
-              <span class="train-type ${route.class}">${route.name}</span>
-            </div>
-            <div class="train-eta ${etaClass}">${etaText}</div>
+      // Next trains - always visible
+      html += `
+        <div class="train-section">
+          <div class="section-header">Next trains</div>
+          <div class="train-list">
+            ${nextTrains.map(t => renderTrain(t, currentMinutes)).join('')}
           </div>
-        `;
-      }).join('');
+        </div>
+      `;
+
+      // Later trains - collapsible
+      html += renderCollapsibleSection('laterTrains', 'Later', laterTrains, currentMinutes);
+
+      // Rest of day - collapsible
+      html += renderCollapsibleSection('restTrains', 'Rest of day', restTrains, currentMinutes);
+
+      container.innerHTML = html;
+
+      // Add toggle listeners
+      container.querySelectorAll('.section-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sectionId = btn.dataset.section;
+          const list = document.getElementById(sectionId);
+          btn.classList.toggle('open');
+          list.classList.toggle('open');
+        });
+      });
     }
 
     // Add to favorites
@@ -716,15 +797,6 @@
           state.direction = btn.dataset.dir;
           state.destination = null;
           updateDestinations();
-          updateTrains();
-        });
-      });
-
-      document.querySelectorAll('.time-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('active'));
-          btn.classList.add('active');
-          state.hours = parseInt(btn.dataset.hours);
           updateTrains();
         });
       });
