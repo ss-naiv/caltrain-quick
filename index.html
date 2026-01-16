@@ -196,6 +196,11 @@
       background: var(--gray);
       color: white;
     }
+    .dir-btn:disabled {
+      background: #f5f5f5;
+      color: #bbb;
+      cursor: not-allowed;
+    }
     .setup-modal {
       position: fixed;
       top: 0;
@@ -461,14 +466,29 @@
       const destSelect = document.getElementById('destStation');
       const homeIdx = DATA.stations.findIndex(s => s.id === state.homeStation);
 
-      let stations;
-      if (state.direction === 'n') {
-        // Northbound: stations before home (lower index = more north)
-        stations = DATA.stations.slice(0, homeIdx);
-      } else {
-        // Southbound: stations after home
-        stations = DATA.stations.slice(homeIdx + 1);
+      // Calculate available stations for each direction
+      const northStations = DATA.stations.slice(0, homeIdx).reverse(); // Nearest first
+      const southStations = DATA.stations.slice(homeIdx + 1); // Already nearest first
+
+      // Update direction tab states
+      const northBtn = document.querySelector('.dir-btn[data-dir="n"]');
+      const southBtn = document.querySelector('.dir-btn[data-dir="s"]');
+
+      northBtn.disabled = northStations.length === 0;
+      southBtn.disabled = southStations.length === 0;
+
+      // Auto-switch direction if current has no stations
+      if (state.direction === 'n' && northStations.length === 0 && southStations.length > 0) {
+        state.direction = 's';
+        northBtn.classList.remove('active');
+        southBtn.classList.add('active');
+      } else if (state.direction === 's' && southStations.length === 0 && northStations.length > 0) {
+        state.direction = 'n';
+        southBtn.classList.remove('active');
+        northBtn.classList.add('active');
       }
+
+      const stations = state.direction === 'n' ? northStations : southStations;
 
       const options = '<option value="">Select destination</option>' +
         stations.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
@@ -625,9 +645,17 @@
       let html = '';
 
       // Next trains - always visible
+      const nextFirstTime = formatTime(nextTrains[0][0]);
+      const nextLastTime = formatTime(nextTrains[nextTrains.length - 1][0]);
+      const nextTimeRange = nextTrains.length === 1 ? nextFirstTime : `${nextFirstTime} - ${nextLastTime}`;
+
       html += `
         <div class="train-section">
-          <div class="section-header">Next trains</div>
+          <div class="section-header">
+            <span>Next trains</span>
+            <span class="section-count">${nextTrains.length}</span>
+            <span class="section-time">${nextTimeRange}</span>
+          </div>
           <div class="train-list">
             ${nextTrains.map(t => renderTrain(t, currentMinutes)).join('')}
           </div>
@@ -819,6 +847,7 @@
 
       document.querySelectorAll('.dir-btn').forEach(btn => {
         btn.addEventListener('click', () => {
+          if (btn.disabled) return;
           document.querySelectorAll('.dir-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
           state.direction = btn.dataset.dir;
