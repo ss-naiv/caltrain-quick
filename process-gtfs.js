@@ -162,9 +162,15 @@ Object.keys(holidays).forEach(date => {
   }
 });
 
+// Filter out stations with no trains
+const activeStations = mainStations.filter(s => {
+  const sched = compactSchedule[s.id];
+  return sched && (sched.n.length > 0 || sched.s.length > 0);
+});
+
 // Output data
 const data = {
-  stations: mainStations.map(s => ({ id: s.id, name: s.name })),
+  stations: activeStations.map(s => ({ id: s.id, name: s.name })),
   schedule: compactSchedule,
   holidays: compactHolidays,
   validFrom: calendar[0]?.start_date,
@@ -184,7 +190,7 @@ fs.writeFileSync(
 );
 
 console.log('Generated schedule data:');
-console.log(`- ${mainStations.length} stations`);
+console.log(`- ${activeStations.length} stations (${mainStations.length - activeStations.length} inactive filtered out)`);
 console.log(`- Valid from ${data.validFrom} to ${data.validTo}`);
 console.log(`- ${Object.keys(compactHolidays).length} holiday exceptions`);
 console.log(`- Minified size: ${(fs.statSync(path.join(__dirname, 'schedule-data.min.json')).size / 1024).toFixed(1)} KB`);
