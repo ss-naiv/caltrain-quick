@@ -620,19 +620,31 @@
       const currentMinutes = getCurrentMinutes();
 
       const scheduleKey = direction === 'n' ? 'n' : 's';
-      const schedule = DATA.schedule[from]?.[scheduleKey] || [];
+      const originSchedule = DATA.schedule[from]?.[scheduleKey] || [];
+      const destSchedule = DATA.schedule[to]?.[scheduleKey] || [];
 
-      // Filter trains: correct service type, departing today (until ~2am next day)
+      // Get set of train numbers that stop at destination
+      const destTrainNums = new Set(
+        destSchedule
+          .filter(t => t[3] === serviceFilter)
+          .map(t => t[1])
+      );
+
+      // Filter trains: correct service type, stops at destination, departing today
       const endOfDay = 24 * 60 + 120; // Until 2am
-      let allTrains = schedule.filter(t => {
-        const [time, , , svc] = t;
+      let allTrains = originSchedule.filter(t => {
+        const [time, trainNum, , svc] = t;
         return svc === serviceFilter &&
                time >= currentMinutes &&
-               time <= endOfDay;
+               time <= endOfDay &&
+               destTrainNums.has(trainNum);
       });
 
       if (allTrains.length === 0) {
-        container.innerHTML = '<div class="no-trains">No more trains today</div>';
+        const noServiceMsg = destTrainNums.size === 0
+          ? `No ${serviceType} service to this station`
+          : 'No more trains today';
+        container.innerHTML = `<div class="no-trains">${noServiceMsg}</div>`;
         return;
       }
 
