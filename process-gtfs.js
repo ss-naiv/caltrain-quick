@@ -118,7 +118,11 @@ stopTimes.forEach(st => {
 
   const direction = trip.direction === 0 ? 'northbound' : 'southbound';
   const service = services[trip.serviceId];
-  const serviceType = service?.weekday ? 'weekday' : (service?.weekend ? 'weekend' : 'holiday');
+
+  // Skip holiday-only services (not in calendar.txt, only in calendar_dates.txt)
+  if (!service) return;
+
+  const serviceType = service.weekday ? 'weekday' : 'weekend';
 
   if (!schedule[stationId]) schedule[stationId] = { northbound: [], southbound: [] };
 
