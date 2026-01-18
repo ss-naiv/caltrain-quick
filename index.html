@@ -575,7 +575,7 @@
 
     // Format minutes to time string
     function formatTime(minutes) {
-      let h = Math.floor(minutes / 60);
+      let h = Math.floor(minutes / 60) % 24;  // Wrap to 0-23 for times past midnight
       const m = minutes % 60;
       const ampm = h >= 12 ? 'pm' : 'am';
       h = h % 12 || 12;
