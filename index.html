@@ -304,6 +304,7 @@
       font-weight: 500;
     }
     .status-ontime { background: #D1FAE5; color: #065F46; }
+    .status-early { background: #FEF3C7; color: #92400E; }
     .status-late { background: #FEE2E2; color: #991B1B; }
     .status-loading { background: #E5E7EB; color: #6B7280; }
     .api-input {
@@ -724,7 +725,9 @@
       // Live status badge (only for trains within ~1 hour)
       let statusBadge = '';
       if (liveDelay !== null && eta <= 60) {
-        if (liveDelay <= 0) {
+        if (liveDelay < 0) {
+          statusBadge = `<span class="live-status status-early">${liveDelay} min</span>`;
+        } else if (liveDelay === 0) {
           statusBadge = '<span class="live-status status-ontime">On time</span>';
         } else {
           statusBadge = `<span class="live-status status-late">+${liveDelay} min</span>`;
