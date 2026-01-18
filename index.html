@@ -556,6 +556,7 @@
     }
 
     // Get service type for today (or previous day if before 3am)
+    // Returns: 'weekday' (0), 'weekend' (1), or 'modified' (2)
     function getServiceType() {
       let now = new Date();
 
@@ -567,8 +568,12 @@
       const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
       const day = now.getDay();
 
-      // Check holidays first
-      if (DATA.holidays[dateStr]) {
+      // Check holidays first (1=weekend schedule, 2=modified schedule)
+      const holidayType = DATA.holidays[dateStr];
+      if (holidayType === 2) {
+        return 'modified';
+      }
+      if (holidayType === 1) {
         return 'weekend';
       }
 
@@ -793,7 +798,7 @@
       }
 
       const serviceType = getServiceType();
-      const serviceFilter = serviceType === 'weekday' ? 0 : 1;
+      const serviceFilter = serviceType === 'weekday' ? 0 : (serviceType === 'weekend' ? 1 : 2);
       const currentMinutes = getCurrentMinutes();
 
       const scheduleKey = direction === 'n' ? 'n' : 's';
@@ -925,8 +930,8 @@
     // Update service type display
     function updateServiceDisplay() {
       const serviceType = getServiceType();
-      document.getElementById('serviceType').textContent =
-        serviceType === 'weekday' ? 'Weekday' : 'Weekend';
+      const labels = { weekday: 'Weekday', weekend: 'Weekend', modified: 'Holiday' };
+      document.getElementById('serviceType').textContent = labels[serviceType] || 'Weekday';
     }
 
     // Check schedule expiry

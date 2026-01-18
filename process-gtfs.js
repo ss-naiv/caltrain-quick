@@ -119,10 +119,14 @@ stopTimes.forEach(st => {
   const direction = trip.direction === 0 ? 'northbound' : 'southbound';
   const service = services[trip.serviceId];
 
-  // Skip holiday-only services (not in calendar.txt, only in calendar_dates.txt)
-  if (!service) return;
-
-  const serviceType = service.weekday ? 'weekday' : 'weekend';
+  // Determine service type: 0=weekday, 1=weekend, 2=modified (holiday-only)
+  let serviceType;
+  if (service) {
+    serviceType = service.weekday ? 'weekday' : 'weekend';
+  } else {
+    // Holiday-only service (M trains) - only in calendar_dates.txt
+    serviceType = 'modified';
+  }
 
   if (!schedule[stationId]) schedule[stationId] = { northbound: [], southbound: [] };
 
@@ -153,8 +157,9 @@ Object.keys(schedule).forEach(stationId => {
 // Build station order (for determining valid destinations)
 const stationOrder = mainStations.map(s => s.id);
 
-// Compact the schedule - only keep times as array of [minutes, trainNum, routeType(0=local,1=limited,2=express), serviceType(0=weekday,1=weekend)]
+// Compact the schedule - only keep times as array of [minutes, trainNum, routeType(0=local,1=limited,2=express), serviceType(0=weekday,1=weekend,2=modified)]
 const routeTypeMap = { 'Local Weekday': 0, 'Local Weekend': 0, 'Local': 0, 'Limited': 1, 'Express': 2, 'South County': 3 };
+const serviceTypeMap = { 'weekday': 0, 'weekend': 1, 'modified': 2 };
 const compactSchedule = {};
 
 Object.keys(schedule).forEach(stationId => {
@@ -163,24 +168,34 @@ Object.keys(schedule).forEach(stationId => {
       t.t,
       t.n,
       routeTypeMap[t.r] ?? 0,
-      t.s === 'weekday' ? 0 : 1
+      serviceTypeMap[t.s] ?? 0
     ]),
     s: schedule[stationId].southbound.map(t => [
       t.t,
       t.n,
       routeTypeMap[t.r] ?? 0,
-      t.s === 'weekday' ? 0 : 1
+      serviceTypeMap[t.s] ?? 0
     ])
   };
 });
 
-// Compact holidays - just date -> weekend service flag
+// Compact holidays - date -> service type (1=weekend schedule, 2=modified schedule)
 const compactHolidays = {};
 Object.keys(holidays).forEach(date => {
-  // If weekday service is removed on this date, it's a holiday
-  const hasWeekdayRemoved = Object.values(holidays[date]).some(h => h.type === 2);
-  if (hasWeekdayRemoved) {
-    compactHolidays[date] = true;
+  const entries = Object.entries(holidays[date]);
+  // Check if modified service (M trains) is added on this date
+  const hasModifiedAdded = entries.some(([serviceId, h]) =>
+    h.type === 1 && !services[serviceId]
+  );
+  // Check if regular weekday service is removed
+  const hasWeekdayRemoved = entries.some(([serviceId, h]) =>
+    h.type === 2 && services[serviceId]?.weekday
+  );
+
+  if (hasModifiedAdded) {
+    compactHolidays[date] = 2;  // Modified schedule (M trains)
+  } else if (hasWeekdayRemoved) {
+    compactHolidays[date] = 1;  // Weekend schedule on a weekday
   }
 });
 
