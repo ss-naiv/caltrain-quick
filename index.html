@@ -288,6 +288,14 @@
       font-size: 13px;
       text-align: center;
     }
+    .holiday-notice {
+      background: #DBEAFE;
+      color: #1E40AF;
+      padding: 10px 16px;
+      font-size: 13px;
+      text-align: center;
+    }
+    .holiday-notice a { color: #1E40AF; font-weight: 500; }
     footer {
       text-align: center;
       padding: 16px;
@@ -351,6 +359,10 @@
 
   <div class="expiry-warning hidden" id="expiryWarning">
     Schedule may be outdated. New schedule available.
+  </div>
+
+  <div class="holiday-notice hidden" id="holidayNotice">
+    Holiday schedule in effect. <a href="https://www.caltrain.com/schedules/holiday-service-schedules" target="_blank">Verify on Caltrain.com</a>
   </div>
 
   <div class="container">
@@ -932,6 +944,15 @@
       const serviceType = getServiceType();
       const labels = { weekday: 'Weekday', weekend: 'Weekend', modified: 'Holiday' };
       document.getElementById('serviceType').textContent = labels[serviceType] || 'Weekday';
+
+      // Show holiday notice when not regular weekday/weekend
+      const holidayNotice = document.getElementById('holidayNotice');
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      if (DATA?.holidays[dateStr]) {
+        holidayNotice.classList.remove('hidden');
+      } else {
+        holidayNotice.classList.add('hidden');
+      }
     }
 
     // Check schedule expiry
