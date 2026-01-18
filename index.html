@@ -295,6 +295,51 @@
       color: #999;
     }
     footer a { color: #666; }
+    footer .footer-links { display: flex; justify-content: center; gap: 16px; }
+    .live-status {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+      font-weight: 500;
+    }
+    .status-ontime { background: #D1FAE5; color: #065F46; }
+    .status-late { background: #FEE2E2; color: #991B1B; }
+    .status-loading { background: #E5E7EB; color: #6B7280; }
+    .api-input {
+      width: 100%;
+      padding: 12px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      font-family: monospace;
+    }
+    .api-help {
+      font-size: 13px;
+      color: #666;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
+    .api-help a { color: var(--red); }
+    .btn-row { display: flex; gap: 8px; }
+    .btn-row button { flex: 1; }
+    .btn-secondary {
+      padding: 12px;
+      background: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .api-status {
+      font-size: 12px;
+      padding: 8px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    .api-status.connected { background: #D1FAE5; color: #065F46; }
+    .api-status.disconnected { background: #FEE2E2; color: #991B1B; }
   </style>
 </head>
 <body>
@@ -349,9 +394,29 @@
   </div>
 
   <footer>
-    Schedule valid until <span id="validUntil">-</span><br>
-    <a href="#" id="changeHome">Change home station</a>
+    Schedule valid until <span id="validUntil">-</span>
+    <div class="footer-links">
+      <a href="#" id="changeHome">Change station</a>
+      <a href="#" id="openApiSettings">Live status</a>
+    </div>
   </footer>
+
+  <div class="setup-modal hidden" id="apiModal">
+    <div class="setup-content">
+      <div class="setup-title">Live Train Status</div>
+      <div id="apiStatus" class="api-status disconnected">No API key configured</div>
+      <div class="api-help">
+        Get real-time delays for trains departing within the hour.
+        <a href="https://511.org/open-data/transit" target="_blank">Sign up for a free 511.org API key</a>,
+        then paste it below (or paste the whole email - we'll find it).
+      </div>
+      <input type="text" id="apiKeyInput" class="api-input" placeholder="Paste API key or email...">
+      <div class="btn-row">
+        <button class="btn-secondary" id="apiCancel">Cancel</button>
+        <button class="setup-btn" id="apiSave" style="margin:0">Save Key</button>
+      </div>
+    </div>
+  </div>
 
   <div class="setup-modal hidden" id="setupModal">
     <div class="setup-content">
@@ -397,6 +462,96 @@
     // Save state to localStorage
     function saveState() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    // API Key management (stored separately)
+    const API_KEY_STORAGE = 'caltrain-511-key';
+    let liveStatusCache = {}; // Cache: trainNum -> {delay, timestamp}
+
+    function getApiKey() {
+      return localStorage.getItem(API_KEY_STORAGE);
+    }
+
+    function setApiKey(key) {
+      if (key) {
+        localStorage.setItem(API_KEY_STORAGE, key);
+      } else {
+        localStorage.removeItem(API_KEY_STORAGE);
+      }
+      updateApiStatusDisplay();
+    }
+
+    function extractApiKey(input) {
+      // Extract UUID pattern from input (handles pasting whole email)
+      const match = input.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+      return match ? match[0] : null;
+    }
+
+    function checkUrlForApiKey() {
+      const params = new URLSearchParams(window.location.search);
+      const key = params.get('apikey') || params.get('key');
+      if (key) {
+        const extracted = extractApiKey(key);
+        if (extracted) {
+          setApiKey(extracted);
+          // Clean URL without reloading
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
+    }
+
+    function updateApiStatusDisplay() {
+      const statusEl = document.getElementById('apiStatus');
+      const key = getApiKey();
+      if (key) {
+        statusEl.className = 'api-status connected';
+        statusEl.textContent = `API key configured: ${key.slice(0, 8)}...`;
+      } else {
+        statusEl.className = 'api-status disconnected';
+        statusEl.textContent = 'No API key configured';
+      }
+    }
+
+    // Fetch live status from 511.org API
+    async function fetchLiveStatus(stationId, direction) {
+      const apiKey = getApiKey();
+      if (!apiKey) return null;
+
+      const stopId = DATA.stops511?.[stationId]?.[direction];
+      if (!stopId) return null;
+
+      try {
+        const url = `https://api.511.org/transit/StopMonitoring?api_key=${apiKey}&agency=CT&stopCode=${stopId}&format=json`;
+        const response = await fetch(url);
+        if (!response.ok) return null;
+
+        const data = await response.json();
+        const visits = data?.ServiceDelivery?.StopMonitoringDelivery?.MonitoredStopVisit || [];
+
+        // Build delay map: trainNum -> delay in minutes
+        const delayMap = {};
+        visits.forEach(visit => {
+          const journey = visit.MonitoredVehicleJourney;
+          const call = journey?.MonitoredCall;
+          if (!call) return;
+
+          const trainNum = journey.FramedVehicleJourneyRef?.DatedVehicleJourneyRef;
+          const aimed = call.AimedDepartureTime || call.AimedArrivalTime;
+          const expected = call.ExpectedDepartureTime || call.ExpectedArrivalTime;
+
+          if (trainNum && aimed && expected) {
+            const aimedTime = new Date(aimed).getTime();
+            const expectedTime = new Date(expected).getTime();
+            const delayMins = Math.round((expectedTime - aimedTime) / 60000);
+            delayMap[trainNum] = delayMins;
+          }
+        });
+
+        return delayMap;
+      } catch (e) {
+        console.error('Failed to fetch live status:', e);
+        return null;
+      }
     }
 
     // Get service type for today
@@ -546,7 +701,7 @@
     }
 
     // Render a single train row
-    function renderTrain(t, currentMinutes) {
+    function renderTrain(t, currentMinutes, liveDelay = null) {
       const [time, trainNum, routeType] = t;
       const route = getRouteType(routeType);
       const eta = time - currentMinutes;
@@ -566,11 +721,21 @@
         etaText = mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
       }
 
+      // Live status badge (only for trains within ~1 hour)
+      let statusBadge = '';
+      if (liveDelay !== null && eta <= 60) {
+        if (liveDelay <= 0) {
+          statusBadge = '<span class="live-status status-ontime">On time</span>';
+        } else {
+          statusBadge = `<span class="live-status status-late">+${liveDelay} min</span>`;
+        }
+      }
+
       return `
         <div class="train">
           <div class="train-time">${formatTime(time)}</div>
           <div class="train-info">
-            <div class="train-number">Train ${trainNum}</div>
+            <div class="train-number">Train ${trainNum}${statusBadge}</div>
             <span class="train-type ${route.class}">${route.name}</span>
           </div>
           <div class="train-eta ${etaClass}">${etaText}</div>
@@ -579,7 +744,7 @@
     }
 
     // Render a collapsible section
-    function renderCollapsibleSection(id, label, trains, currentMinutes) {
+    function renderCollapsibleSection(id, label, trains, currentMinutes, liveDelays = {}) {
       if (trains.length === 0) return '';
 
       const firstTime = formatTime(trains[0][0]);
@@ -599,14 +764,14 @@
             </svg>
           </button>
           <div class="collapsible-list" id="${id}">
-            ${trains.map(t => renderTrain(t, currentMinutes)).join('')}
+            ${trains.map(t => renderTrain(t, currentMinutes, liveDelays[t[1]])).join('')}
           </div>
         </div>
       `;
     }
 
     // Update train list
-    function updateTrains() {
+    async function updateTrains() {
       const container = document.getElementById('trainList');
       const { from, to, direction } = getEffectiveStations();
 
@@ -654,6 +819,24 @@
       const laterTrains = allTrains.slice(BUCKET_SIZE, BUCKET_SIZE * 2);
       const restTrains = allTrains.slice(BUCKET_SIZE * 2);
 
+      // Fetch live status (non-blocking, will update UI when ready)
+      let liveDelays = {};
+      if (getApiKey()) {
+        // First render without live status
+        renderTrainList(container, nextTrains, laterTrains, restTrains, currentMinutes, {});
+        // Then fetch and update with live status
+        const delays = await fetchLiveStatus(from, direction);
+        if (delays) {
+          liveDelays = delays;
+          renderTrainList(container, nextTrains, laterTrains, restTrains, currentMinutes, liveDelays);
+        }
+      } else {
+        renderTrainList(container, nextTrains, laterTrains, restTrains, currentMinutes, {});
+      }
+    }
+
+    // Helper to render the train list (used by updateTrains)
+    function renderTrainList(container, nextTrains, laterTrains, restTrains, currentMinutes, liveDelays) {
       let html = '';
 
       // Next trains - always visible
@@ -669,16 +852,16 @@
             <span class="section-time">${nextTimeRange}</span>
           </div>
           <div class="train-list">
-            ${nextTrains.map(t => renderTrain(t, currentMinutes)).join('')}
+            ${nextTrains.map(t => renderTrain(t, currentMinutes, liveDelays[t[1]])).join('')}
           </div>
         </div>
       `;
 
       // Later trains - collapsible
-      html += renderCollapsibleSection('laterTrains', 'Later', laterTrains, currentMinutes);
+      html += renderCollapsibleSection('laterTrains', 'Later', laterTrains, currentMinutes, liveDelays);
 
       // Rest of day - collapsible
-      html += renderCollapsibleSection('restTrains', 'Rest of day', restTrains, currentMinutes);
+      html += renderCollapsibleSection('restTrains', 'Rest of day', restTrains, currentMinutes, liveDelays);
 
       container.innerHTML = html;
 
@@ -717,7 +900,7 @@
           list.classList.toggle('open');
         });
       });
-    }
+    }  // end renderTrainList
 
     // Add to favorites
     function addToFavorites(stationId) {
@@ -805,6 +988,8 @@
     // Initialize app
     async function init() {
       loadState();
+      checkUrlForApiKey();  // Check for API key in URL
+      updateApiStatusDisplay();  // Update API status display
 
       // Load schedule data
       try {
@@ -898,6 +1083,35 @@
 
       // Reset button (back to home)
       document.getElementById('resetTrip').addEventListener('click', resetToNormalView);
+
+      // API key modal
+      document.getElementById('openApiSettings').addEventListener('click', (e) => {
+        e.preventDefault();
+        document.getElementById('apiKeyInput').value = getApiKey() || '';
+        updateApiStatusDisplay();
+        document.getElementById('apiModal').classList.remove('hidden');
+      });
+
+      document.getElementById('apiCancel').addEventListener('click', () => {
+        document.getElementById('apiModal').classList.add('hidden');
+      });
+
+      document.getElementById('apiSave').addEventListener('click', () => {
+        const input = document.getElementById('apiKeyInput').value.trim();
+        const key = extractApiKey(input);
+        if (key) {
+          setApiKey(key);
+          document.getElementById('apiModal').classList.add('hidden');
+          updateTrains();  // Refresh to fetch live status
+        } else if (input === '') {
+          // Clear key if input is empty
+          setApiKey(null);
+          document.getElementById('apiModal').classList.add('hidden');
+          updateTrains();
+        } else {
+          alert('Could not find a valid API key. Please paste the full key or email.');
+        }
+      });
 
       // Refresh every minute (expanded state is preserved)
       setInterval(() => {
