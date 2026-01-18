@@ -46,6 +46,24 @@ stops.forEach(s => {
   }
 });
 
+// Build station to 511 API stop IDs mapping (for real-time data)
+const stationTo511Stops = {};
+stops.forEach(s => {
+  if (s.parent_station && s.stop_id.match(/^\d+$/)) {
+    // Platform stops have numeric IDs like 70011, 70012
+    const stationId = s.parent_station;
+    if (!stationTo511Stops[stationId]) {
+      stationTo511Stops[stationId] = {};
+    }
+    // Northbound stops end in 1, Southbound end in 2
+    if (s.stop_name.includes('Northbound')) {
+      stationTo511Stops[stationId].n = s.stop_id;
+    } else if (s.stop_name.includes('Southbound')) {
+      stationTo511Stops[stationId].s = s.stop_id;
+    }
+  }
+});
+
 // Map trip_id to service info
 const tripInfo = {};
 trips.forEach(t => {
@@ -172,6 +190,7 @@ const activeStations = mainStations.filter(s => {
 const data = {
   stations: activeStations.map(s => ({ id: s.id, name: s.name })),
   schedule: compactSchedule,
+  stops511: stationTo511Stops,  // For 511.org real-time API
   holidays: compactHolidays,
   validFrom: calendar[0]?.start_date,
   validTo: calendar[0]?.end_date
